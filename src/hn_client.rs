@@ -3,11 +3,12 @@ use hyper::rt::{Future, Stream};
 use hyper::Body;
 use hyper::Client;
 use hyper_tls::HttpsConnector;
-use serde::de::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json;
+use std::path::Display;
 use std::str;
 use tokio::runtime::Runtime;
-use std::marker::PhantomData;
+use std::io::Cursor;
 
 const HN_API_URL_TOPSTORIES: &str = "https://hacker-news.firebaseio.com/v0/topstories.json";
 
@@ -26,24 +27,12 @@ pub fn get_raw_from_url(url: &str) -> Result<Vec<u8>, String> {
         .map(|r| r.to_vec())
 }
 
-pub struct HnResponse<'de, T>
-    where
-        T: Deserialize<'de>,
-{
-    payload: T,
-    c: PhantomData<&'de str>,
-}
-
-pub fn get_from_url<'de, T>(url: &str) -> Result<HnResponse<T>, String>
+pub fn get_from_url<T>(url: &str) -> Result<T, String>
 where
-    T: Deserialize<'de>,
+    T: DeserializeOwned,
 {
     get_raw_from_url(url)
-        .and_then(|r| str::from_utf8(&r).map_err(|e| e.to_string()))
-        .map(|src| {
-            let r: Result<T, serde_json::Error> = serde_json::from_str(&src);
-            r.map(|r| HnResponse{ payload: r, c: PhantomData })
-        })
+        .and_then(|r| serde_json::from_reader(Cursor::new(&r)).map_err(|e| e.to_string()))
 }
 
 #[cfg(test)]
