@@ -1,38 +1,67 @@
+use failure;
 use hyper;
+use hyper::client::HttpConnector;
 use hyper::rt::{Future, Stream};
 use hyper::Body;
 use hyper::Client;
 use hyper_tls::HttpsConnector;
 use serde::de::DeserializeOwned;
 use serde_json;
-use std::path::Display;
+use std::io::Cursor;
 use std::str;
 use tokio::runtime::Runtime;
-use std::io::Cursor;
 
 const HN_API_URL_TOPSTORIES: &str = "https://hacker-news.firebaseio.com/v0/topstories.json";
 
-pub fn get_raw_from_url(url: &str) -> Result<Vec<u8>, String> {
+pub struct HNClient {
+    client: Client<HttpsConnector<HttpConnector>, Body>,
+}
+
+impl HNClient {
+    pub fn new() -> Self {
+        let https = HttpsConnector::new(4).expect("TLS initialization failed");
+        let client = Client::builder().build::<_, Body>(https);
+
+        HNClient { client }
+    }
+
+    pub fn get_from_url<T>(&self, url: &str) -> Result<T, failure::Error>
+    where
+        T: DeserializeOwned,
+    {
+        let url = url.parse::<hyper::Uri>()?;
+
+        let request = self
+            .client
+            .get(url)
+            .and_then(|res| res.into_body().concat2());
+
+        let mut runtime = Runtime::new().unwrap();
+        let response = runtime.block_on(request)?;
+
+        let response = serde_json::from_reader(Cursor::new(response))?;
+
+        Ok(response)
+    }
+}
+
+pub fn get_from_url<T>(url: &str) -> Result<T, failure::Error>
+where
+    T: DeserializeOwned,
+{
     let https = HttpsConnector::new(4).expect("TLS initialization failed");
     let client = Client::builder().build::<_, Body>(https);
 
-    let url = url.parse::<hyper::Uri>().map_err(|e| e.to_string())?;
+    let url = url.parse::<hyper::Uri>()?;
 
     let request = client.get(url).and_then(|res| res.into_body().concat2());
 
     let mut runtime = Runtime::new().unwrap();
-    runtime
-        .block_on(request)
-        .map_err(|e| e.to_string())
-        .map(|r| r.to_vec())
-}
+    let response = runtime.block_on(request)?;
 
-pub fn get_from_url<T>(url: &str) -> Result<T, String>
-where
-    T: DeserializeOwned,
-{
-    get_raw_from_url(url)
-        .and_then(|r| serde_json::from_reader(Cursor::new(&r)).map_err(|e| e.to_string()))
+    let response = serde_json::from_reader(Cursor::new(response))?;
+
+    Ok(response)
 }
 
 #[cfg(test)]
@@ -66,24 +95,6 @@ mod test {
     }
 
     #[test]
-    fn get_raw_from_url_test() {
-        get_raw_from_url(HN_API_URL_TOPSTORIES)
-            .and_then(|r| {
-                str::from_utf8(&r)
-                    .map(|r| r.to_string())
-                    .map_err(|e| e.to_string())
-            })
-            .map(|r| println!("Result: {:?}", r))
-            .unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_raw_from_url_should_panic_for_invalid_url() {
-        get_raw_from_url("haha").unwrap();
-    }
-
-    #[test]
     fn de_list_test() {
         let data = "[17915371,17915560,17914959,17915522,17914723,17915487,17914731,17912734,17914935,17914634,17907816]";
 
@@ -94,8 +105,23 @@ mod test {
 
     #[test]
     fn get_from_url_test() {
-        get_from_url(HN_API_URL_TOPSTORIES)
-            .map(|r: Vec<u64>| println!("Result: {:?}", r))
-            .unwrap();
+        let client = HNClient::new();
+
+        match client.get_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES) {
+            Ok(r) => {
+                for id in r.iter() {
+                    println!("{}", id);
+                }
+            },
+            Err(e) => panic!(e)
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn get_from_url_should_panic_for_invalid_url() {
+        let client = HNClient::new();
+
+        client.get_from_url::<Vec<u64>>("haha").unwrap();
     }
 }
