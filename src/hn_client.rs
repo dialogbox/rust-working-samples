@@ -11,7 +11,19 @@ use std::io::Cursor;
 use std::str;
 use tokio::runtime::Runtime;
 
-const HN_API_URL_TOPSTORIES: &str = "https://hacker-news.firebaseio.com/v0/topstories.json";
+pub struct HNApiUrl;
+
+impl HNApiUrl {
+    #[allow(non_snake_case)]
+    fn HN_API_URL_TOPSTORIES() -> &'static str {
+        "https://hacker-news.firebaseio.com/v0/topstories.json"
+    }
+
+    #[allow(non_snake_case)]
+    fn HN_API_URL_ITEM(id: u64) -> String {
+        format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id)
+    }
+}
 
 pub struct HNClient {
     client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -25,7 +37,7 @@ impl HNClient {
         HNClient { client }
     }
 
-    pub fn get_from_url<T>(&self, url: &str) -> Result<T, failure::Error>
+    fn get_from_url<T>(&self, url: &str) -> Result<T, failure::Error>
     where
         T: DeserializeOwned,
     {
@@ -43,25 +55,39 @@ impl HNClient {
 
         Ok(response)
     }
+
+    pub fn get_top_list(&self) -> Result<Vec<u64>, failure::Error> {
+        self.get_from_url::<Vec<u64>>(HNApiUrl::HN_API_URL_TOPSTORIES())
+    }
+
+    pub fn get_item(&self, id: u64) -> Result<HNItem, failure::Error> {
+        self.get_from_url::<HNItem>(&HNApiUrl::HN_API_URL_ITEM(id))
+    }
 }
 
-pub fn get_from_url<T>(url: &str) -> Result<T, failure::Error>
-where
-    T: DeserializeOwned,
-{
-    let https = HttpsConnector::new(4).expect("TLS initialization failed");
-    let client = Client::builder().build::<_, Body>(https);
+#[derive(Deserialize, Debug)]
+pub enum HNItemType {
+    #[serde(rename = "job")]
+    Job,
+    #[serde(rename = "story")]
+    Story,
+    #[serde(rename = "comment")]
+    Comment,
+    #[serde(rename = "poll")]
+    Poll,
+    #[serde(rename = "pollopt")]
+    PollOpt,
+}
 
-    let url = url.parse::<hyper::Uri>()?;
+#[derive(Deserialize, Debug)]
+pub struct HNItem {
+    id: u64,
+    by: String,
+    kids: Vec<u64>,
+    title: String,
 
-    let request = client.get(url).and_then(|res| res.into_body().concat2());
-
-    let mut runtime = Runtime::new().unwrap();
-    let response = runtime.block_on(request)?;
-
-    let response = serde_json::from_reader(Cursor::new(response))?;
-
-    Ok(response)
+    #[serde(rename = "type")]
+    item_type: HNItemType,
 }
 
 #[cfg(test)]
@@ -73,7 +99,7 @@ mod test {
         let https = HttpsConnector::new(4).expect("TLS initialization failed");
         let client = Client::builder().build::<_, Body>(https);
 
-        let uri = HN_API_URL_TOPSTORIES.parse().unwrap();
+        let uri = HNApiUrl::HN_API_URL_TOPSTORIES().parse().unwrap();
 
         let request = client
             .get(uri)
@@ -104,14 +130,28 @@ mod test {
     }
 
     #[test]
-    fn get_from_url_test() {
+    fn get_top_list_test() {
         let client = HNClient::new();
 
-        match client.get_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES) {
+        match client.get_top_list() {
             Ok(r) => {
-                for id in r.iter() {
-                    println!("{}", id);
-                }
+                r.iter().take(3)
+                    .flat_map(|&id| client.get_item(id))
+                    .map(|item| println!("{}", item.title))
+                    .collect()
+            },
+            Err(e) => panic!(e)
+        }
+    }
+
+
+    #[test]
+    fn get_item_test() {
+        let client = HNClient::new();
+
+        match client.get_item(17915371) {
+            Ok(r) => {
+                println!("{:?}", r);
             },
             Err(e) => panic!(e)
         }
