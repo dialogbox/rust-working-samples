@@ -25,6 +25,9 @@ impl HNApiUrl {
     }
 }
 
+//
+// https://github.com/HackerNews/API
+//
 pub struct HNClient {
     client: Client<HttpsConnector<HttpConnector>, Body>,
 }
