@@ -13,17 +13,11 @@ use tokio::runtime::Runtime;
 
 pub struct HNApiUrl;
 
-impl HNApiUrl {
-    #[allow(non_snake_case)]
-    fn HN_API_URL_TOPSTORIES() -> &'static str {
-        "https://hacker-news.firebaseio.com/v0/topstories.json"
-    }
+#[allow(non_snake_case)]
+macro_rules! HN_API_URL_TOPSTORIES { () => ( "https://hacker-news.firebaseio.com/v0/topstories.json" ) }
 
-    #[allow(non_snake_case)]
-    fn HN_API_URL_ITEM(id: u64) -> String {
-        format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id)
-    }
-}
+#[allow(non_snake_case)]
+macro_rules! HN_API_URL_ITEM { ( $e:expr ) => ( format!("https://hacker-news.firebaseio.com/v0/item/{}.json", $e) )}
 
 //
 // https://github.com/HackerNews/API
@@ -60,11 +54,11 @@ impl HNClient {
     }
 
     pub fn get_top_list(&self) -> Result<Vec<u64>, failure::Error> {
-        self.get_from_url::<Vec<u64>>(HNApiUrl::HN_API_URL_TOPSTORIES())
+        self.get_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES!())
     }
 
     pub fn get_item(&self, id: u64) -> Result<HNItem, failure::Error> {
-        self.get_from_url::<HNItem>(&HNApiUrl::HN_API_URL_ITEM(id))
+        self.get_from_url::<HNItem>(&HN_API_URL_ITEM!(id))
     }
 }
 
@@ -102,7 +96,7 @@ mod test {
         let https = HttpsConnector::new(4).expect("TLS initialization failed");
         let client = Client::builder().build::<_, Body>(https);
 
-        let uri = HNApiUrl::HN_API_URL_TOPSTORIES().parse().unwrap();
+        let uri = HN_API_URL_TOPSTORIES!().parse().unwrap();
 
         let request = client
             .get(uri)
@@ -146,7 +140,6 @@ mod test {
             Err(e) => panic!(e)
         }
     }
-
 
     #[test]
     fn get_item_test() {

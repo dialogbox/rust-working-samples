@@ -10,3 +10,4 @@ extern crate serde_json;
 
 pub mod hn_client;
 pub mod word_count;
+pub mod ownership_demo;
