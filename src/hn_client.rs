@@ -29,7 +29,7 @@ pub struct HNClient {
 
 #[derive(Fail, Debug)]
 #[fail(display = "An error occurred with error message: {}", _0)]
-struct HNClientError(String);
+pub struct HNClientError(String);
 
 
 impl HNClient {
@@ -73,24 +73,15 @@ impl HNClient {
             })
     }
 
-//    pub fn get_top_list_async(&self) -> Result<Vec<HNItem>, HNClientError> {
-//        let futures = self.get_future_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES!().parse().unwrap())
-//            .map(|ids: Vec<u64>| {
-//                let mut futures = Vec::new();
-//                for id in ids {
-//                    futures.push(self.get_future_from_url::<HNItem>(HN_API_URL_ITEM!(id).parse().unwrap()));
-//                }
-//                futures
-//            })
-//            .and_then(|fs|
-//                future::join_all(fs)
-//            );
-//
-//        Runtime::new().unwrap().block_on(futures)
-//    }
+    pub fn get_top_list(&self) -> Result<Vec<HNItem>, HNClientError> {
+        let ids = self.get_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES!())
+            .map_err(|e| HNClientError(e.to_string()))?;
 
-    pub fn get_top_list(&self) -> Result<Vec<u64>, failure::Error> {
-        self.get_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES!())
+        let futures: Vec<_> = ids.into_iter()
+            .map(|id| self.get_future_from_url::<HNItem>(HN_API_URL_ITEM!(id).parse().unwrap()))
+            .collect();
+
+        Runtime::new().unwrap().block_on(future::join_all(futures))
     }
 
     pub fn get_item(&self, id: u64) -> Result<HNItem, failure::Error> {
@@ -163,27 +154,12 @@ mod test {
     }
 
     #[test]
-    fn get_top_list_test() {
-        let client = HNClient::new();
-
-        match client.get_top_list() {
-            Ok(r) => {
-                r.iter().take(3)
-                    .flat_map(|&id| client.get_item(id))
-                    .map(|item| println!("{}", item.title))
-                    .collect()
-            }
-            Err(e) => panic!(e)
-        }
-    }
-
-    #[test]
     fn tokio_async_multirequest_test() {
         let https = HttpsConnector::new(4).expect("TLS initialization failed");
         let client = Client::builder().build::<_, Body>(https);
 
         let mut futures = Vec::new();
-        for (idx, url) in ["https://hacker-news.firebaseio.com/v0/item/17915371.json", "https://hacker-news.firebaseio.com/v0/item/17915371.json"].iter().enumerate() {
+        for (_idx, url) in ["https://hacker-news.firebaseio.com/v0/item/17915371.json", "https://hacker-news.firebaseio.com/v0/item/17915371.json"].iter().enumerate() {
             let url_fut = client.get(url.parse().unwrap())
                 .and_then(|response| {
                     println!("Got response!");
@@ -199,7 +175,7 @@ mod test {
 
         let mut runtime = Runtime::new().unwrap();
         match runtime.block_on(future::select_all(futures)) {
-            Ok(s) => {
+            Ok(_) => {
                 ()
             }
             Err(_) => (),
@@ -213,7 +189,7 @@ mod test {
         let client = HNClient::new();
 
         let mut futures = Vec::new();
-        for (idx, url) in [
+        for (_idx, url) in [
             "https://hacker-news.firebaseio.com/v0/item/17915371.json",
             "https://hacker-news.firebaseio.com/v0/item/17915371.json"].iter().enumerate() {
             futures.push(client.get_future_from_url::<HNItem>(url.parse().unwrap()));
@@ -221,7 +197,7 @@ mod test {
 
         let mut runtime = Runtime::new().unwrap();
         match runtime.block_on(future::select_all(futures)) {
-            Ok(s) => {
+            Ok(_) => {
                 ()
             }
             Err(_) => (),
@@ -229,7 +205,7 @@ mod test {
     }
 
     #[test]
-    fn get_top_list_async_test() {
+    fn get_top_list_sample() {
         let client = HNClient::new();
 
         let futures = client.get_future_from_url::<Vec<u64>>(HN_API_URL_TOPSTORIES!().parse().unwrap())
@@ -247,13 +223,35 @@ mod test {
         let mut runtime = Runtime::new().unwrap();
         match runtime.block_on(futures) {
             Ok(s) => {
-                println!("{:?}", s)
+                s.iter().for_each(|item| {
+                    println!("{}", item.title)
+                })
             }
             Err(e) => {
                 println!("{:?}", e)
             },
         };
     }
+
+
+    #[test]
+    fn get_top_list_test() {
+        let client = HNClient::new();
+
+        let list = client.get_top_list();
+
+        match list {
+            Ok(s) => {
+                s.iter().for_each(|item| {
+                    println!("{}", item.title)
+                })
+            }
+            Err(e) => {
+                println!("{:?}", e)
+            },
+        };
+    }
+
 
     #[test]
     fn get_item_test() {
