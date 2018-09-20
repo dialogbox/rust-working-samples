@@ -114,8 +114,55 @@ pub struct HNItem {
     item_type: HNItemType,
 }
 
+
 #[cfg(test)]
 mod test {
+    use super::*;
+
+
+    #[test]
+    fn get_top_list_test() {
+        let client = HNClient::new();
+
+        let list = client.get_top_list();
+
+        match list {
+            Ok(s) => {
+                s.iter().for_each(|item| {
+                    println!("{}", item.title)
+                })
+            }
+            Err(e) => {
+                println!("{:?}", e)
+            },
+        };
+    }
+
+
+    #[test]
+    fn get_item_test() {
+        let client = HNClient::new();
+
+        match client.get_item(17915371) {
+            Ok(r) => {
+                println!("{:?}", r);
+            }
+            Err(e) => panic!(e)
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn get_from_url_should_panic_for_invalid_url() {
+        let client = HNClient::new();
+
+        client.get_from_url::<Vec<u64>>("haha").unwrap();
+    }
+}
+
+
+#[cfg(test)]
+mod playground {
     use super::*;
 
     #[test]
@@ -231,45 +278,5 @@ mod test {
                 println!("{:?}", e)
             },
         };
-    }
-
-
-    #[test]
-    fn get_top_list_test() {
-        let client = HNClient::new();
-
-        let list = client.get_top_list();
-
-        match list {
-            Ok(s) => {
-                s.iter().for_each(|item| {
-                    println!("{}", item.title)
-                })
-            }
-            Err(e) => {
-                println!("{:?}", e)
-            },
-        };
-    }
-
-
-    #[test]
-    fn get_item_test() {
-        let client = HNClient::new();
-
-        match client.get_item(17915371) {
-            Ok(r) => {
-                println!("{:?}", r);
-            }
-            Err(e) => panic!(e)
-        }
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_from_url_should_panic_for_invalid_url() {
-        let client = HNClient::new();
-
-        client.get_from_url::<Vec<u64>>("haha").unwrap();
     }
 }
