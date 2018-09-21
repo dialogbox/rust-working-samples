@@ -12,3 +12,4 @@ extern crate futures;
 pub mod hn_client;
 pub mod word_count;
 pub mod ownership_demo;
+pub mod traitsamples;
